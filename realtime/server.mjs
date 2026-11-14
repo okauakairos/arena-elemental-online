@@ -29,7 +29,7 @@ export function createArena({allowedOrigins=[],maxRooms=200}={}){
  const send=(ws,data)=>{if(ws.readyState===WebSocket.OPEN&&ws.bufferedAmount<128*1024)ws.send(JSON.stringify(data));};
  function view(entry){const s=snapshot(entry.state,Date.now());s.players=s.players.map(p=>({...p,connected:entry.connections.has(p.id)}));s.waiting=s.players.filter(p=>p.connected).length<2;return s;}
  function broadcast(entry){entry.state.revision=(entry.state.revision||0)+1;const room=view(entry);for(const [id,ws] of entry.connections)send(ws,{type:'state',room,ack:entry.state.players.find(p=>p.id===id)?.seq??-1});}
- function detach(ws,remove=false){const entry=ws.entry,p=ws.player;if(!entry||entry.connections.get(p.id)!==ws)return;entry.connections.delete(p.id);entry.lastUsed=Date.now();entry.disconnected.set(p.id,Date.now());p.input=idle();p.seen=0;ws.entry=ws.player=null;if(remove){entry.state.players=entry.state.players.filter(q=>q.id!==p.id);entry.disconnected.delete(p.id);}if(entry.state.host===p.id)entry.state.host=entry.connections.keys().next().value??entry.state.players[0]?.id??null;broadcast(entry);}
+ function detach(ws,remove=false){const entry=ws.entry,p=ws.player;if(!entry||entry.connections.get(p.id)!==ws)return;entry.connections.delete(p.id);entry.lastUsed=Date.now();entry.disconnected.set(p.id,Date.now());p.input=idle();p.parryQueued=false;p.parryHeld=false;p.parry=0;p.seen=0;ws.entry=ws.player=null;if(remove){entry.state.players=entry.state.players.filter(q=>q.id!==p.id);entry.disconnected.delete(p.id);}if(entry.state.host===p.id)entry.state.host=entry.connections.keys().next().value??entry.state.players[0]?.id??null;broadcast(entry);}
  wss.on('connection',ws=>{
   ws.lastMessage=Date.now();ws.window=Date.now();ws.count=0;
   ws.on('error',()=>{});
@@ -62,8 +62,8 @@ export function createArena({allowedOrigins=[],maxRooms=200}={}){
      const entry=ws.entry,p=ws.player;if(!entry||!p)fail('Entre em uma sala.',401);
      p.seen=now;entry.lastUsed=now;
      if(m.action==='input'){
-      const i=m.input;if(!Number.isSafeInteger(m.seq)||!i||![-1,0,1].includes(i.move)||typeof i.jump!=='boolean'||!Array.isArray(i.fire)||i.fire.length!==3||!i.fire.every(v=>typeof v==='boolean'))fail('Comando inválido.');
-      if(m.seq>p.seq){p.seq=m.seq;ws.lastInput=now;p.input={move:i.move,jump:i.jump,fire:[...i.fire]};}return;
+      const i=m.input;if(!Number.isSafeInteger(m.seq)||!i||![-1,0,1].includes(i.move)||typeof i.jump!=='boolean'||(i.parry!==undefined&&typeof i.parry!=='boolean')||!Array.isArray(i.fire)||i.fire.length!==3||!i.fire.every(v=>typeof v==='boolean'))fail('Comando inválido.');
+      if(m.seq>p.seq){p.seq=m.seq;ws.lastInput=now;p.parryQueued||=i.parry===true&&!p.input.parry;p.input={move:i.move,jump:i.jump,parry:i.parry===true,fire:[...i.fire]};}return;
      }else if(m.action==='start'){
       if(entry.state.host!==p.id)fail('Só o criador pode iniciar.',403);
       if(!['lobby','finished'].includes(entry.state.phase))fail('A partida já começou.',409);
