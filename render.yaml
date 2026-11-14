@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: arena-elemental-online
+    runtime: node
+    plan: free
+    region: virginia
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.23.0
+      - key: ALLOWED_ORIGINS
+        value: https://arena-elemental-pixelfx.earthy-hake-2018.chatgpt.site

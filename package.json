@@ -1,0 +1,1 @@
+{"name":"arena-elemental-online","private":true,"type":"module","engines":{"node":">=22"},"scripts":{"start":"node realtime/server.mjs","build":"node scripts/build.mjs","test:realtime":"node scripts/test-realtime.mjs","db:generate":"drizzle-kit generate"},"dependencies":{"ws":"8.23.0"},"devDependencies":{"drizzle-kit":"0.31.4","drizzle-orm":"0.44.5"}}
