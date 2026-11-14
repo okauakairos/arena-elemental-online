@@ -1,13 +1,13 @@
-import {classOf} from '../public/catalog.js';
+import {classOf,motionAt} from '../public/catalog.js';
 export const G=224,MAX=3,GOAL=5,PARRY_WINDOW=.3,PARRY_COOLDOWN=1.2;
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 export function newRoom(code,now){return {code,mapId:'abbey',phase:'lobby',players:[],shots:[],bolts:[],events:[],eid:0,host:null,last:now,elapsed:0,round:0,winner:null};}
-export function newPlayer(id,hash,name,slot,now){return {id,hash,name,slot,classId:'mage',maxHp:100,speed:115,x:[90,390,240][slot],y:G,vy:0,dir:slot===1?-1:1,hp:100,kills:0,deaths:0,seen:now,input:{move:0,jump:false,fire:[false,false,false]},seq:-1,cd:[0,0,0],cast:0,element:0,parry:0,parryCd:0,parryFlash:0,parryHeld:false,parryQueued:false,inv:0,slow:0,respawn:0,moving:false};}
+export function newPlayer(id,hash,name,slot,now){return {id,hash,name,slot,classId:'mage',maxHp:100,speed:115,x:[90,390,240][slot],y:G,vy:0,dir:slot===1?-1:1,hp:100,kills:0,deaths:0,seen:now,input:{move:0,jump:false,fire:[false,false,false]},seq:-1,cd:[0,0,0],cast:0,element:0,burst:null,parry:0,parryCd:0,parryFlash:0,parryHeld:false,parryQueued:false,inv:0,slow:0,respawn:0,moving:false};}
 function event(s,type,data){s.events.push({id:++s.eid,type,...data});s.events=s.events.slice(-50);}
-export function reset(s,now){s.round++;s.phase='countdown';s.countdown=3;s.elapsed=0;s.winner=null;s.shots=[];s.bolts=[];for(const p of s.players){const profile=classOf(p.classId);Object.assign(p,{maxHp:profile.hp,speed:profile.speed,x:[90,390,240][p.slot],y:G,vy:0,hp:profile.hp,kills:0,deaths:0,cd:[0,0,0],inv:0,respawn:0,slow:0,cast:0,parry:0,parryCd:0,parryFlash:0,parryHeld:false,parryQueued:false,input:{move:0,jump:false,fire:[false,false,false]}});}s.last=now;event(s,'round',{});}
-function damage(s,p,amount,owner,freeze){if(s.phase!=='playing'||p.hp<=0||p.inv>0||s.last-p.seen>=8000)return;if(p.parry>0){p.parryFlash=.35;event(s,'parry',{target:p.id,x:p.x,y:p.y});return;}p.hp=Math.max(0,p.hp-amount);p.slow=Math.max(p.slow,freeze||0);event(s,'hit',{target:p.id,x:p.x,y:p.y,amount});if(!p.hp){p.deaths++;p.respawn=2.5;p.input={move:0,jump:false,fire:[false,false,false]};const killer=s.players.find(q=>q.id===owner);if(killer&&killer.id!==p.id){killer.kills++;if(killer.kills>=GOAL){s.phase='finished';s.winner=killer.id;}}event(s,'ko',{target:p.id,owner});}}
+export function reset(s,now){s.round++;s.phase='countdown';s.countdown=3;s.elapsed=0;s.winner=null;s.shots=[];s.bolts=[];for(const p of s.players){const profile=classOf(p.classId);Object.assign(p,{maxHp:profile.hp,speed:profile.speed,x:[90,390,240][p.slot],y:G,vy:0,hp:profile.hp,kills:0,deaths:0,cd:[0,0,0],inv:0,respawn:0,slow:0,cast:0,burst:null,parry:0,parryCd:0,parryFlash:0,parryHeld:false,parryQueued:false,input:{move:0,jump:false,fire:[false,false,false]}});}s.last=now;event(s,'round',{});}
+function damage(s,p,amount,owner,freeze){if(s.phase!=='playing'||p.hp<=0||p.inv>0||s.last-p.seen>=8000)return;if(p.parry>0){p.parryFlash=.35;p.parryCd=0;event(s,'parry',{target:p.id,x:p.x,y:p.y});return;}p.hp=Math.max(0,p.hp-amount);p.slow=Math.max(p.slow,freeze||0);event(s,'hit',{target:p.id,x:p.x,y:p.y,amount});if(!p.hp){p.burst=null;p.deaths++;p.respawn=2.5;p.input={move:0,jump:false,fire:[false,false,false]};const killer=s.players.find(q=>q.id===owner);if(killer&&killer.id!==p.id){killer.kills++;if(killer.kills>=GOAL){s.phase='finished';s.winner=killer.id;}}event(s,'ko',{target:p.id,owner});}}
 function fire(s,p,i){
- if(p.cd[i]>0||s.phase!=='playing')return;
+ if(p.cd[i]>0||p.burst||s.phase!=='playing')return;
  const a=classOf(p.classId).abilities[i];p.cd[i]=a.cooldown;p.cast=.42;p.element=i;
  event(s,'cast',{owner:p.id,element:i,x:p.x,y:p.y,dir:p.dir});
  if(a.kind==='bolt'){
@@ -16,23 +16,27 @@ function fire(s,p,i){
   const kind={fire:0,ice:1,dagger:2}[a.kind];s.shots.push({id:s.eid,owner:p.id,kind,damage:a.damage,speed:[220,300,380][kind],x:p.x+p.dir*20,y:p.y-23,dir:p.dir,life:2});
  }else{
   const from=p.x,to=['dash','charge'].includes(a.kind)?clamp(from+p.dir*a.range,18,462):from;
-  event(s,'ability',{owner:p.id,kind:a.kind,x:from,to,y:p.y,dir:p.dir,range:a.range});
-  if(a.kind==='dash'){p.x=to;return;}
+  event(s,'ability',{owner:p.id,kind:a.kind,x:from,to,y:p.y,dir:p.dir,range:a.range,duration:a.duration});
+  if(a.kind==='dash'||a.kind==='charge'){p.burst={id:s.eid,kind:a.kind,from,to,duration:a.duration,elapsed:0,dir:p.dir,damage:a.damage,hits:[]};return;}
   for(const q of s.players){
    if(q.id===p.id||q.hp<=0||s.last-q.seen>=8000||Math.abs(q.y-p.y)>38)continue;
    const dx=q.x-from;
    const inRange=a.kind==='quake'?Math.abs(dx)<=a.range:a.kind==='charge'?(q.x>=Math.min(from,to)-12&&q.x<=Math.max(from,to)+12):dx*p.dir>=-5&&dx*p.dir<=a.range;
    if(inRange)damage(s,q,a.damage+(a.kind==='backstab'&&q.dir===p.dir?18:0),p.id,0);
   }
-  if(a.kind==='charge')p.x=to;
+
  }
 }
-function tick(s,dt,now){if(s.phase==='countdown'){s.countdown-=dt;if(s.countdown<=0)s.phase='playing';return;}if(s.phase!=='playing')return;s.elapsed+=dt;
- for(const p of s.players){p.parry=Math.max(0,(p.parry||0)-dt);p.parryCd=Math.max(0,(p.parryCd||0)-dt);p.parryFlash=Math.max(0,(p.parryFlash||0)-dt);p.cd=p.cd.map(n=>Math.max(0,n-dt));p.cast=Math.max(0,p.cast-dt);p.inv=Math.max(0,p.inv-dt);p.slow=Math.max(0,p.slow-dt);if(p.hp<=0){p.parry=0;p.parryQueued=false;p.parryHeld=!!p.input.parry;p.respawn-=dt;if(p.respawn<=0&&now-p.seen<8000){Object.assign(p,{hp:classOf(p.classId).hp,x:[90,390,240][p.slot],y:G,vy:0,inv:1.6});event(s,'respawn',{target:p.id});}continue;}const input=now-p.seen<2200?p.input:{move:0,jump:false,fire:[false,false,false]};const parryPressed=p.parryQueued||(input.parry&&!p.parryHeld);p.parryHeld=!!input.parry;p.parryQueued=false;if(parryPressed&&p.parryCd<=0){p.parry=PARRY_WINDOW;p.parryCd=PARRY_COOLDOWN;}p.moving=!!input.move;if(input.move){p.dir=input.move;p.x=clamp(p.x+input.move*(p.speed||115)*(p.slow>0?.4:1)*dt,18,462);}if(input.jump&&p.y===G)p.vy=-245;p.vy+=640*dt;p.y=Math.min(G,p.y+p.vy*dt);if(p.y===G)p.vy=0;}
+function tick(s,dt,now){if(s.phase==='countdown'){s.countdown-=dt;if(s.countdown<=0)s.phase='playing';return;}if(s.phase!=='playing')return;s.elapsed+=dt;const sweeps=[];
+ for(const p of s.players){p.parry=Math.max(0,(p.parry||0)-dt);p.parryCd=Math.max(0,(p.parryCd||0)-dt);p.parryFlash=Math.max(0,(p.parryFlash||0)-dt);p.cd=p.cd.map(n=>Math.max(0,n-dt));p.cast=Math.max(0,p.cast-dt);p.inv=Math.max(0,p.inv-dt);p.slow=Math.max(0,p.slow-dt);if(p.hp<=0){p.burst=null;p.parry=0;p.parryQueued=false;p.parryHeld=!!p.input.parry;p.respawn-=dt;if(p.respawn<=0&&now-p.seen<8000){Object.assign(p,{hp:classOf(p.classId).hp,x:[90,390,240][p.slot],y:G,vy:0,inv:1.6});event(s,'respawn',{target:p.id});}continue;}const input=now-p.seen<2200?p.input:{move:0,jump:false,fire:[false,false,false]};const parryPressed=p.parryQueued||(input.parry&&!p.parryHeld);p.parryHeld=!!input.parry;p.parryQueued=false;if(parryPressed&&p.parryCd<=0){p.parry=PARRY_WINDOW;p.parryCd=PARRY_COOLDOWN;}p.moving=!!input.move||!!p.burst;if(p.burst){const burst=p.burst,old=p.x;burst.elapsed=Math.min(burst.duration,burst.elapsed+dt);p.x=motionAt(burst);p.dir=burst.dir;sweeps.push({p,burst,old});}else if(input.move){p.dir=input.move;p.x=clamp(p.x+input.move*(p.speed||115)*(p.slow>0?.4:1)*dt,18,462);}if(input.jump&&p.y===G)p.vy=-245;p.vy+=640*dt;p.y=Math.min(G,p.y+p.vy*dt);if(p.y===G)p.vy=0;}
+ for(const {p,burst,old} of sweeps){
+  if(burst.kind==='charge'&&p.hp>0)for(const q of s.players){if(q.id===p.id||q.hp<=0||now-q.seen>=8000||burst.hits.includes(q.id)||Math.abs(q.y-p.y)>38)continue;if(q.x>=Math.min(old,p.x)-12&&q.x<=Math.max(old,p.x)+12){burst.hits.push(q.id);damage(s,q,burst.damage,p.id,0);}}
+  if(burst.elapsed>=burst.duration)p.burst=null;
+ }
  for(const p of s.players)if(p.hp>0&&now-p.seen<2200)for(let i=0;i<3;i++)if(p.input.fire[i])fire(s,p,i);
  for(const a of s.shots){a.life-=dt;const old=a.x;a.x+=a.dir*(a.speed||(a.kind?300:220))*dt;const target=s.players.filter(p=>p.id!==a.owner&&p.hp>0&&p.inv<=0&&now-p.seen<8000).find(p=>Math.abs(p.y-23-a.y)<23&&p.x>=Math.min(old,a.x)-12&&p.x<=Math.max(old,a.x)+12);if(target){a.life=0;if(a.kind===1)damage(s,target,a.damage||26,a.owner,1.7);else if(a.kind===2)damage(s,target,a.damage||24,a.owner,0);else {for(const p of s.players)if(p.id!==a.owner&&Math.abs(p.x-target.x)<43&&Math.abs(p.y-target.y)<32)damage(s,p,a.damage||38,a.owner,0);event(s,'explosion',{x:target.x,y:target.y});}}}s.shots=s.shots.filter(a=>a.life>0&&a.x>-50&&a.x<530);
  for(const b of s.bolts){b.t-=dt;if(b.t<=0){for(const p of s.players)if(p.id!==b.owner&&Math.abs(p.x-b.x)<42&&p.y>G-65)damage(s,p,62,b.owner,.8);}}s.bolts=s.bolts.filter(b=>b.t>0);
  if(s.elapsed>=180&&s.phase==='playing'){const ranks=[...s.players].sort((a,b)=>b.kills-a.kills||a.deaths-b.deaths);s.phase='finished';s.winner=ranks.length>1&&ranks[0].kills===ranks[1].kills&&ranks[0].deaths===ranks[1].deaths?null:ranks[0]?.id??null;}
 }
 export function advance(s,now){const active=s.players.filter(p=>now-p.seen<8000);if(!active.some(p=>p.id===s.host))s.host=active[0]?.id??s.host;if(active.length<2&&s.phase==='playing'){s.last=now;return;}let delta=clamp((now-s.last)/1000,0,.4);s.last=now;while(delta>0){const dt=Math.min(delta,1/60);tick(s,dt,now);delta-=dt;}if(!s.players.some(p=>p.id===s.host&&now-p.seen<8000))s.host=active[0]?.id??s.host;}
-export function snapshot(s,now){return {...s,last:now,players:s.players.map(({hash,input,seq,seen,parryHeld,parryQueued,...p})=>({...p,connected:now-seen<8000})),waiting:s.players.filter(p=>now-p.seen<8000).length<2};}
+export function snapshot(s,now){return {...s,last:now,players:s.players.map(({hash,input,seq,seen,parryHeld,parryQueued,...p})=>({...p,burst:p.burst?{id:p.burst.id,kind:p.burst.kind,from:p.burst.from,to:p.burst.to,elapsed:p.burst.elapsed,duration:p.burst.duration,dir:p.burst.dir}:null,connected:now-seen<8000})),waiting:s.players.filter(p=>now-p.seen<8000).length<2};}

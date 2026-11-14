@@ -1,3 +1,4 @@
+import {motionAt} from './catalog.js';
 import {scenery} from './art.js';
 const W=480,G=224;
 const rect=(c,x,y,w,h,color)=>{c.fillStyle=color;c.fillRect(Math.round(x),Math.round(y),w,h);};
@@ -42,7 +43,7 @@ function glacier(c,t,px){
 }
 export function drawArena(c,t,px=240,id='abbey'){if(id==='volcano')volcano(c,t,px);else if(id==='forest')forest(c,t,px);else if(id==='glacier')glacier(c,t,px);else scenery(c,t,px);}
 
-export function drawCombatFx(c,effects,dt){for(const e of effects){e.life-=dt;if(e.life<=0)continue;const progress=1-e.life/.4;c.save();c.globalAlpha=Math.min(1,e.life*4);c.lineWidth=2;
- if(e.kind==='dash'||e.kind==='charge'){const color=e.kind==='dash'?'#87ebcd':'#ffd999';for(let j=0;j<6;j++){const x=e.x+(e.to-e.x)*(j/6);c.globalAlpha=(1-j/7)*e.life*1.5;rect(c,x,e.y-32,3,26,color);}c.globalAlpha=e.life*2;rect(c,e.to-9,e.y-3,18,3,color);}
+export function drawCombatFx(c,effects,dt){for(const e of effects){e.life-=dt;if(e.life<=0)continue;const progress=1-e.life/(e.duration||.4);c.save();c.globalAlpha=Math.min(1,e.life*4);c.lineWidth=2;
+ if(e.kind==='dash'||e.kind==='charge'){const color=e.kind==='dash'?'#87ebcd':'#ffd999',duration=e.duration||.3;for(let j=0;j<5;j++){const elapsed=Math.max(0,progress*duration-j*.018),x=motionAt({from:e.x,to:e.to,duration},elapsed);c.globalAlpha=(1-j/5)*.35;rect(c,x,e.y-29+j,2,21-j*2,color);}if(progress>.8){c.globalAlpha=(1-progress)*3;rect(c,e.to-9,e.y-3,18,3,color);}}
  else if(e.kind==='quake'){c.strokeStyle='#efcf8f';c.beginPath();c.ellipse(e.x,e.y-1,Math.max(1,e.range*progress),9+progress*8,0,Math.PI,Math.PI*2);c.stroke();for(let j=-3;j<=3;j++){const x=e.x+j*20*progress;shape(c,[[x-4,e.y],[x,e.y-13*(1-progress)],[x+4,e.y]],'#d4b581');}}
  else{c.translate(e.x,e.y-22);c.scale(e.dir,1);c.strokeStyle=e.kind==='backstab'?'#a8ffe0':'#ffe1a5';c.beginPath();c.arc(8,0,e.range*(.45+progress*.35),-1.1+progress*.7,1.1+progress*.7);c.stroke();c.lineWidth=1;c.strokeStyle='#ffffff';c.beginPath();c.moveTo(15,-15);c.lineTo(e.range,12);c.stroke();}c.restore();}}

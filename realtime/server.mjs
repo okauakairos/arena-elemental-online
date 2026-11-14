@@ -30,7 +30,7 @@ export function createArena({allowedOrigins=[],maxRooms=200}={}){
  const send=(ws,data)=>{if(ws.readyState===WebSocket.OPEN&&ws.bufferedAmount<128*1024)ws.send(JSON.stringify(data));};
  function view(entry){const s=snapshot(entry.state,Date.now());s.players=s.players.map(p=>({...p,connected:entry.connections.has(p.id)}));s.waiting=s.players.filter(p=>p.connected).length<2;return s;}
  function broadcast(entry){entry.state.revision=(entry.state.revision||0)+1;const room=view(entry);for(const [id,ws] of entry.connections)send(ws,{type:'state',room,ack:entry.state.players.find(p=>p.id===id)?.seq??-1});}
- function detach(ws,remove=false){const entry=ws.entry,p=ws.player;if(!entry||entry.connections.get(p.id)!==ws)return;entry.connections.delete(p.id);entry.lastUsed=Date.now();entry.disconnected.set(p.id,Date.now());p.input=idle();p.parryQueued=false;p.parryHeld=false;p.parry=0;p.seen=0;ws.entry=ws.player=null;if(remove){entry.state.players=entry.state.players.filter(q=>q.id!==p.id);entry.disconnected.delete(p.id);}if(entry.state.host===p.id)entry.state.host=entry.connections.keys().next().value??entry.state.players[0]?.id??null;broadcast(entry);}
+ function detach(ws,remove=false){const entry=ws.entry,p=ws.player;if(!entry||entry.connections.get(p.id)!==ws)return;entry.connections.delete(p.id);entry.lastUsed=Date.now();entry.disconnected.set(p.id,Date.now());p.input=idle();p.parryQueued=false;p.parryHeld=false;p.parry=0;p.burst=null;p.seen=0;ws.entry=ws.player=null;if(remove){entry.state.players=entry.state.players.filter(q=>q.id!==p.id);entry.disconnected.delete(p.id);}if(entry.state.host===p.id)entry.state.host=entry.connections.keys().next().value??entry.state.players[0]?.id??null;broadcast(entry);}
  wss.on('connection',ws=>{
   ws.lastMessage=Date.now();ws.window=Date.now();ws.count=0;
   ws.on('error',()=>{});
@@ -69,7 +69,7 @@ export function createArena({allowedOrigins=[],maxRooms=200}={}){
       if(!['lobby','finished'].includes(entry.state.phase))fail('Escolha antes de começar a partida.',409);
       if(m.classId!==undefined&&!Object.hasOwn(CLASSES,m.classId))fail('Classe inválida.');
       if(m.mapId!==undefined){if(entry.state.host!==p.id)fail('Só o criador escolhe o cenário.',403);if(!Object.hasOwn(MAPS,m.mapId))fail('Cenário inválido.');}
-      if(m.classId!==undefined){p.classId=m.classId;const profile=classOf(p.classId);Object.assign(p,{hp:profile.hp,maxHp:profile.hp,speed:profile.speed,cd:[0,0,0],input:idle(),parry:0,parryCd:0});}
+      if(m.classId!==undefined){p.classId=m.classId;const profile=classOf(p.classId);Object.assign(p,{hp:profile.hp,maxHp:profile.hp,speed:profile.speed,cd:[0,0,0],input:idle(),burst:null,parry:0,parryCd:0});}
       if(m.mapId!==undefined)entry.state.mapId=m.mapId;
       result={room:view(entry)};
      }else if(m.action==='start'){
