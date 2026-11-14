@@ -1,3 +1,4 @@
+import {CLASSES,MAPS,classOf} from '../public/catalog.js';
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -45,16 +46,16 @@ export function createArena({allowedOrigins=[],maxRooms=200}={}){
     if(m.action==='create'||m.action==='join'){
      if(ws.entry)fail('Você já está em uma sala.');
      const name=typeof m.name==='string'?m.name.trim().slice(0,18):'';
-     if(!name)fail('Escolha um apelido.');
+     if(!name)fail('Escolha um apelido.');if(m.classId!==undefined&&!Object.hasOwn(CLASSES,m.classId))fail('Classe inválida.');if(m.action==='create'&&m.mapId!==undefined&&!Object.hasOwn(MAPS,m.mapId))fail('Cenário inválido.');
      if(typeof m.token!=='string'||!/^[a-zA-Z0-9-]{24,80}$/.test(m.token))fail('Chave de sessão inválida.');
      let entry,code;
      if(m.action==='create'){
       if(rooms.size>=maxRooms)fail('Servidor cheio. Tente novamente em instantes.',503);
       do{code=randomBytes(4).toString('hex').toUpperCase();}while(rooms.has(code));
-      entry={state:newRoom(code,now),connections:new Map(),disconnected:new Map(),lastUsed:now};rooms.set(code,entry);
+      entry={state:newRoom(code,now),connections:new Map(),disconnected:new Map(),lastUsed:now};entry.state.mapId=m.mapId||'abbey';rooms.set(code,entry);
      }else{code=String(m.code||'').toUpperCase();entry=rooms.get(code);if(!entry)fail('Sala encerrada. Crie uma nova sala.',404);}
      const secret=hash(m.token);let p=entry.state.players.find(p=>p.hash===secret);
-     if(!p){if(m.id)fail('Sessão inválida.',401);if(entry.state.players.length>=MAX)fail('A sala já tem 3 jogadores.',409);if(!['lobby','finished'].includes(entry.state.phase))fail('A partida já começou.',409);const slot=[0,1,2].find(i=>!entry.state.players.some(p=>p.slot===i));p=newPlayer(randomUUID(),secret,name,slot,now);entry.state.players.push(p);entry.state.host??=p.id;}
+     if(!p){if(m.id)fail('Sessão inválida.',401);if(entry.state.players.length>=MAX)fail('A sala já tem 3 jogadores.',409);if(!['lobby','finished'].includes(entry.state.phase))fail('A partida já começou.',409);const slot=[0,1,2].find(i=>!entry.state.players.some(p=>p.slot===i));p=newPlayer(randomUUID(),secret,name,slot,now);p.classId=m.classId||'mage';const profile=classOf(p.classId);Object.assign(p,{hp:profile.hp,maxHp:profile.hp,speed:profile.speed});entry.state.players.push(p);entry.state.host??=p.id;}
      const prior=entry.connections.get(p.id);entry.connections.set(p.id,ws);if(prior&&prior!==ws){prior.entry=prior.player=null;prior.close(4001,'Sessão aberta em outra conexão');}
      ws.entry=entry;ws.player=p;p.seen=now;p.input=idle();entry.lastUsed=now;entry.disconnected.delete(p.id);
      result={id:p.id,token:m.token,room:view(entry)};
@@ -64,6 +65,13 @@ export function createArena({allowedOrigins=[],maxRooms=200}={}){
      if(m.action==='input'){
       const i=m.input;if(!Number.isSafeInteger(m.seq)||!i||![-1,0,1].includes(i.move)||typeof i.jump!=='boolean'||(i.parry!==undefined&&typeof i.parry!=='boolean')||!Array.isArray(i.fire)||i.fire.length!==3||!i.fire.every(v=>typeof v==='boolean'))fail('Comando inválido.');
       if(m.seq>p.seq){p.seq=m.seq;ws.lastInput=now;p.parryQueued||=i.parry===true&&!p.input.parry;p.input={move:i.move,jump:i.jump,parry:i.parry===true,fire:[...i.fire]};}return;
+     }else if(m.action==='configure'){
+      if(!['lobby','finished'].includes(entry.state.phase))fail('Escolha antes de começar a partida.',409);
+      if(m.classId!==undefined&&!Object.hasOwn(CLASSES,m.classId))fail('Classe inválida.');
+      if(m.mapId!==undefined){if(entry.state.host!==p.id)fail('Só o criador escolhe o cenário.',403);if(!Object.hasOwn(MAPS,m.mapId))fail('Cenário inválido.');}
+      if(m.classId!==undefined){p.classId=m.classId;const profile=classOf(p.classId);Object.assign(p,{hp:profile.hp,maxHp:profile.hp,speed:profile.speed,cd:[0,0,0],input:idle(),parry:0,parryCd:0});}
+      if(m.mapId!==undefined)entry.state.mapId=m.mapId;
+      result={room:view(entry)};
      }else if(m.action==='start'){
       if(entry.state.host!==p.id)fail('Só o criador pode iniciar.',403);
       if(!['lobby','finished'].includes(entry.state.phase))fail('A partida já começou.',409);
