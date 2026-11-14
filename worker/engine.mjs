@@ -11,7 +11,7 @@ function fire(s,p,i){
  const a=classOf(p.classId).abilities[i];p.cd[i]=a.cooldown;p.cast=.42;p.element=i;
  event(s,'cast',{owner:p.id,element:i,x:p.x,y:p.y,dir:p.dir});
  if(a.kind==='bolt'){
-  const others=s.players.filter(q=>q.id!==p.id&&q.hp>0&&s.last-q.seen<8000).sort((a,b)=>Math.abs(a.x-p.x)-Math.abs(b.x-p.x));const x=others[0]?.x??clamp(p.x+p.dir*90,20,460);s.bolts.push({x,owner:p.id,t:.76});event(s,'bolt',{owner:p.id,x});
+  const others=s.players.filter(q=>q.id!==p.id&&q.hp>0&&s.last-q.seen<8000).sort((a,b)=>Math.abs(a.x-p.x)-Math.abs(b.x-p.x));const x=others[0]?.x??clamp(p.x+p.dir*90,20,460);s.bolts.push({x,owner:p.id,t:.76,damage:a.damage});event(s,'bolt',{owner:p.id,x});
  }else if(['fire','ice','dagger'].includes(a.kind)){
   const kind={fire:0,ice:1,dagger:2}[a.kind];s.shots.push({id:s.eid,owner:p.id,kind,damage:a.damage,speed:[220,300,380][kind],x:p.x+p.dir*20,y:p.y-23,dir:p.dir,life:2});
  }else{
@@ -34,8 +34,8 @@ function tick(s,dt,now){if(s.phase==='countdown'){s.countdown-=dt;if(s.countdown
   if(burst.elapsed>=burst.duration)p.burst=null;
  }
  for(const p of s.players)if(p.hp>0&&now-p.seen<2200)for(let i=0;i<3;i++)if(p.input.fire[i])fire(s,p,i);
- for(const a of s.shots){a.life-=dt;const old=a.x;a.x+=a.dir*(a.speed||(a.kind?300:220))*dt;const target=s.players.filter(p=>p.id!==a.owner&&p.hp>0&&p.inv<=0&&now-p.seen<8000).find(p=>Math.abs(p.y-23-a.y)<23&&p.x>=Math.min(old,a.x)-12&&p.x<=Math.max(old,a.x)+12);if(target){a.life=0;if(a.kind===1)damage(s,target,a.damage||26,a.owner,1.7);else if(a.kind===2)damage(s,target,a.damage||24,a.owner,0);else {for(const p of s.players)if(p.id!==a.owner&&Math.abs(p.x-target.x)<43&&Math.abs(p.y-target.y)<32)damage(s,p,a.damage||38,a.owner,0);event(s,'explosion',{x:target.x,y:target.y});}}}s.shots=s.shots.filter(a=>a.life>0&&a.x>-50&&a.x<530);
- for(const b of s.bolts){b.t-=dt;if(b.t<=0){for(const p of s.players)if(p.id!==b.owner&&Math.abs(p.x-b.x)<42&&p.y>G-65)damage(s,p,62,b.owner,.8);}}s.bolts=s.bolts.filter(b=>b.t>0);
+ for(const a of s.shots){a.life-=dt;const old=a.x;a.x+=a.dir*(a.speed||(a.kind?300:220))*dt;const target=s.players.filter(p=>p.id!==a.owner&&p.hp>0&&p.inv<=0&&now-p.seen<8000).find(p=>Math.abs(p.y-23-a.y)<23&&p.x>=Math.min(old,a.x)-12&&p.x<=Math.max(old,a.x)+12);if(target){a.life=0;if(a.kind===1)damage(s,target,a.damage??classOf('mage').abilities[1].damage,a.owner,1.7);else if(a.kind===2)damage(s,target,a.damage||24,a.owner,0);else {for(const p of s.players)if(p.id!==a.owner&&Math.abs(p.x-target.x)<43&&Math.abs(p.y-target.y)<32)damage(s,p,a.damage??classOf('mage').abilities[0].damage,a.owner,0);event(s,'explosion',{x:target.x,y:target.y});}}}s.shots=s.shots.filter(a=>a.life>0&&a.x>-50&&a.x<530);
+ for(const b of s.bolts){b.t-=dt;if(b.t<=0){for(const p of s.players)if(p.id!==b.owner&&Math.abs(p.x-b.x)<42&&p.y>G-65)damage(s,p,b.damage??classOf('mage').abilities[2].damage,b.owner,.8);}}s.bolts=s.bolts.filter(b=>b.t>0);
  if(s.elapsed>=180&&s.phase==='playing'){const ranks=[...s.players].sort((a,b)=>b.kills-a.kills||a.deaths-b.deaths);s.phase='finished';s.winner=ranks.length>1&&ranks[0].kills===ranks[1].kills&&ranks[0].deaths===ranks[1].deaths?null:ranks[0]?.id??null;}
 }
 export function advance(s,now){const active=s.players.filter(p=>now-p.seen<8000);if(!active.some(p=>p.id===s.host))s.host=active[0]?.id??s.host;if(active.length<2&&s.phase==='playing'){s.last=now;return;}let delta=clamp((now-s.last)/1000,0,.4);s.last=now;while(delta>0){const dt=Math.min(delta,1/60);tick(s,dt,now);delta-=dt;}if(!s.players.some(p=>p.id===s.host&&now-p.seen<8000))s.host=active[0]?.id??s.host;}
